@@ -107,8 +107,8 @@ class Parser {
         return this.parseFromUse();
       case TokenKind.Export:
         return this.parseExport();
-      case TokenKind.Pub:
-        return this.parsePub();
+      case TokenKind.Public:
+        return this.parsePublic();
       case TokenKind.Namespace:
         return this.parseNamespace();
       case TokenKind.Class:
@@ -759,15 +759,15 @@ class Parser {
     return { type: "Export", decl, span: this.spanFrom(start) };
   }
 
-  private parsePub(): Stmt {
+  private parsePublic(): Stmt {
     const start = this.peek().span.start;
-    this.advance(); // pub
+    this.advance(); // public
     const decl = this.parseStatement();
     if (!decl) {
-      this.addError("Expected declaration after 'pub'");
+      this.addError("Expected declaration after 'public'");
       return { type: "ExprStmt", expr: this.dummyExpr(), span: this.spanFrom(start) };
     }
-    return { type: "Pub", decl, span: this.spanFrom(start) };
+    return { type: "Public", decl, span: this.spanFrom(start) };
   }
 
   private parseNamespace(): Stmt {
@@ -1096,10 +1096,6 @@ class Parser {
         this.advance(); // eq
         const right = this.parseComparison();
         left = { type: "BinOp", op: "neq", left, right, span: this.mergeSpans(left.span, right.span) };
-      } else if (this.check(TokenKind.Is)) {
-        this.advance();
-        const typeToken = this.expect(TokenKind.Ident, "Expected type name");
-        left = { type: "IsCheck", expr: left, typeName: typeToken.text, span: this.mergeSpans(left.span, typeToken.span) };
       } else if (this.check(TokenKind.Instanceof)) {
         this.advance();
         const classToken = this.expect(TokenKind.Ident, "Expected class name");

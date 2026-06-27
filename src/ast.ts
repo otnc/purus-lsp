@@ -306,7 +306,7 @@ export interface ExportDefaultStmt {
 }
 
 export interface PubStmt {
-  type: "Pub";
+  type: "Public";
   decl: Stmt;
   span: Span;
 }

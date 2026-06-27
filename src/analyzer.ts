@@ -263,7 +263,7 @@ class Analyzer {
 
       case "Export":
       case "ExportDefault":
-      case "Pub":
+      case "Public":
         this.visitStmt(stmt.decl);
         break;
 

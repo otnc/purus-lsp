@@ -79,7 +79,13 @@ class Lexer {
 
     // String literal ///...///
     if (this.match("///")) {
-      this.readString();
+      this.readString("///", "///");
+      return;
+    }
+
+    // Semicolon string //;...;// (v0.11.0)
+    if (this.match("//;")) {
+      this.readString("//;", ";//");
       return;
     }
 
@@ -261,26 +267,21 @@ class Lexer {
     this.pushToken(TokenKind.Comment, this.source.slice(start.offset, this.pos), start, this.makePos());
   }
 
-  private readString(): void {
+  /**
+   * Read a string with given open/close delimiters.
+   *   open  = "///" | "//;"
+   *   close = "///" | ";//"
+   */
+  private readString(open: string, close: string): void {
     const start = this.makePos();
-    this.advance(); // /
-    this.advance(); // /
-    this.advance(); // /
+    for (let i = 0; i < open.length; i++) this.advance();
 
     let value = "";
 
     while (this.pos < this.source.length) {
-      if (this.match("///")) {
-        this.advance();
-        this.advance();
-        this.advance();
-        const token: Token = {
-          kind: TokenKind.Str,
-          text: this.source.slice(start.offset, this.pos),
-          value,
-          span: { start, end: this.makePos() },
-        };
-        this.tokens.push(token);
+      if (this.match(close)) {
+        for (let i = 0; i < close.length; i++) this.advance();
+        this.pushToken(TokenKind.Str, this.source.slice(start.offset, this.pos), start, this.makePos(), value);
         return;
       }
 
@@ -291,19 +292,21 @@ class Lexer {
         if (this.pos < this.source.length) {
           const esc = this.source[this.pos];
           switch (esc) {
-            case "n": value += "\n"; break;
-            case "t": value += "\t"; break;
+            case "n":  value += "\n"; break;
+            case "t":  value += "\t"; break;
             case "\\": value += "\\"; break;
-            case "/": value += "/"; break;
-            case "[": value += "["; break;
-            case "]": value += "]"; break;
-            default: value += "\\" + esc; break;
+            case "/":  value += "/";  break;
+            case ";":  value += ";";  break;
+            case "[":  value += "[";  break;
+            case "]":  value += "]";  break;
+            default:   value += "\\" + esc; break;
           }
           this.advance();
         }
         continue;
       }
 
+      // [expr] interpolation — track depth to avoid closing string on ]
       if (ch === "[") {
         let depth = 1;
         value += "[";
@@ -324,13 +327,7 @@ class Lexer {
     }
 
     // Unterminated string
-    const token: Token = {
-      kind: TokenKind.Str,
-      text: this.source.slice(start.offset, this.pos),
-      value,
-      span: { start, end: this.makePos() },
-    };
-    this.tokens.push(token);
+    this.pushToken(TokenKind.Str, this.source.slice(start.offset, this.pos), start, this.makePos(), value);
   }
 
   private readRegex(): void {
@@ -396,13 +393,57 @@ class Lexer {
   private readNumber(): void {
     const start = this.makePos();
     let text = "";
-    let isFloat = false;
 
+    // Optional leading minus (negative literal)
     if (this.source[this.pos] === "-") {
       text += "-";
       this.advance();
     }
 
+    // Hex literal: 0x...
+    if (this.source[this.pos] === "0" &&
+        this.pos + 1 < this.source.length &&
+        (this.source[this.pos + 1] === "x" || this.source[this.pos + 1] === "X")) {
+      text += this.source[this.pos]; this.advance(); // 0
+      text += this.source[this.pos]; this.advance(); // x/X
+      while (this.pos < this.source.length && /[0-9a-fA-F]/.test(this.source[this.pos])) {
+        text += this.source[this.pos];
+        this.advance();
+      }
+      // BigInt suffix n
+      if (this.pos < this.source.length && this.source[this.pos] === "n") {
+        text += "n";
+        this.advance();
+        this.pushToken(TokenKind.BigInt, text, start, this.makePos(), text);
+      } else {
+        this.pushToken(TokenKind.Int, text, start, this.makePos(), parseInt(text.replace(/^-?0[xX]/, ""), 16));
+      }
+      return;
+    }
+
+    // Binary literal: 0b...
+    if (this.source[this.pos] === "0" &&
+        this.pos + 1 < this.source.length &&
+        (this.source[this.pos + 1] === "b" || this.source[this.pos + 1] === "B")) {
+      text += this.source[this.pos]; this.advance(); // 0
+      text += this.source[this.pos]; this.advance(); // b/B
+      while (this.pos < this.source.length && (this.source[this.pos] === "0" || this.source[this.pos] === "1")) {
+        text += this.source[this.pos];
+        this.advance();
+      }
+      // BigInt suffix n
+      if (this.pos < this.source.length && this.source[this.pos] === "n") {
+        text += "n";
+        this.advance();
+        this.pushToken(TokenKind.BigInt, text, start, this.makePos(), text);
+      } else {
+        this.pushToken(TokenKind.Int, text, start, this.makePos(), parseInt(text.replace(/^-?0[bB]/, ""), 2));
+      }
+      return;
+    }
+
+    // Decimal integer or float
+    let isFloat = false;
     while (this.pos < this.source.length && this.isDigit(this.source[this.pos])) {
       text += this.source[this.pos];
       this.advance();
@@ -417,6 +458,14 @@ class Lexer {
         text += this.source[this.pos];
         this.advance();
       }
+    }
+
+    // BigInt suffix n (decimal only, not float)
+    if (!isFloat && this.pos < this.source.length && this.source[this.pos] === "n") {
+      text += "n";
+      this.advance();
+      this.pushToken(TokenKind.BigInt, text, start, this.makePos(), text);
+      return;
     }
 
     const kind = isFloat ? TokenKind.Float : TokenKind.Int;
