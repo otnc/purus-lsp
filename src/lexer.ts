@@ -406,9 +406,15 @@ class Lexer {
         (this.source[this.pos + 1] === "x" || this.source[this.pos + 1] === "X")) {
       text += this.source[this.pos]; this.advance(); // 0
       text += this.source[this.pos]; this.advance(); // x/X
+      const hexDigitStart = text.length;
       while (this.pos < this.source.length && /[0-9a-fA-F]/.test(this.source[this.pos])) {
         text += this.source[this.pos];
         this.advance();
+      }
+      const hexDigits = text.slice(hexDigitStart);
+      if (hexDigits.length === 0) {
+        this.pushToken(TokenKind.Error, text, start, this.makePos());
+        return;
       }
       // BigInt suffix n
       if (this.pos < this.source.length && this.source[this.pos] === "n") {
@@ -416,7 +422,8 @@ class Lexer {
         this.advance();
         this.pushToken(TokenKind.BigInt, text, start, this.makePos(), text);
       } else {
-        this.pushToken(TokenKind.Int, text, start, this.makePos(), parseInt(text.replace(/^-?0[xX]/, ""), 16));
+        const sign = text.startsWith("-") ? -1 : 1;
+        this.pushToken(TokenKind.Int, text, start, this.makePos(), sign * parseInt(hexDigits, 16));
       }
       return;
     }
@@ -427,9 +434,15 @@ class Lexer {
         (this.source[this.pos + 1] === "b" || this.source[this.pos + 1] === "B")) {
       text += this.source[this.pos]; this.advance(); // 0
       text += this.source[this.pos]; this.advance(); // b/B
+      const binDigitStart = text.length;
       while (this.pos < this.source.length && (this.source[this.pos] === "0" || this.source[this.pos] === "1")) {
         text += this.source[this.pos];
         this.advance();
+      }
+      const binDigits = text.slice(binDigitStart);
+      if (binDigits.length === 0) {
+        this.pushToken(TokenKind.Error, text, start, this.makePos());
+        return;
       }
       // BigInt suffix n
       if (this.pos < this.source.length && this.source[this.pos] === "n") {
@@ -437,7 +450,8 @@ class Lexer {
         this.advance();
         this.pushToken(TokenKind.BigInt, text, start, this.makePos(), text);
       } else {
-        this.pushToken(TokenKind.Int, text, start, this.makePos(), parseInt(text.replace(/^-?0[bB]/, ""), 2));
+        const sign = text.startsWith("-") ? -1 : 1;
+        this.pushToken(TokenKind.Int, text, start, this.makePos(), sign * parseInt(binDigits, 2));
       }
       return;
     }

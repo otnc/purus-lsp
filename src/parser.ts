@@ -2,7 +2,7 @@ import { Token, TokenKind, Span, Position } from "./token";
 import {
   Program, Stmt, Expr, Param, FnBody, MatchArm, MatchArmBody,
   ClassMember, ObjectEntry, BinaryOp, PostfixModifier, ImportAttribute,
-  SwitchCase,
+  SwitchCase, type CompoundAssignOp,
 } from "./ast";
 
 export interface ParseError {
@@ -921,9 +921,10 @@ class Parser {
     }
 
     // getter: get fn name ...
-    if (this.check(TokenKind.Get) && this.peekAt(1)?.kind === TokenKind.Fn) {
+    if (this.check(TokenKind.Get) &&
+        (this.peekAt(1)?.kind === TokenKind.Fn || this.peekAt(1)?.kind === TokenKind.Function)) {
       this.advance(); // get
-      this.advance(); // fn
+      this.advance(); // fn / function
       const nameToken = this.expect(TokenKind.Ident, "Expected getter name");
       let returnType: string | undefined;
       if (this.check(TokenKind.Gives)) {
@@ -942,9 +943,10 @@ class Parser {
     }
 
     // setter: set fn name param ...
-    if (this.check(TokenKind.Set) && this.peekAt(1)?.kind === TokenKind.Fn) {
+    if (this.check(TokenKind.Set) &&
+        (this.peekAt(1)?.kind === TokenKind.Fn || this.peekAt(1)?.kind === TokenKind.Function)) {
       this.advance(); // set
-      this.advance(); // fn
+      this.advance(); // fn / function
       const nameToken = this.expect(TokenKind.Ident, "Expected setter name");
       const paramName = this.expect(TokenKind.Ident, "Expected parameter name").text;
       const body = this.parseFnBody();
@@ -972,7 +974,7 @@ class Parser {
       this.advance();
     }
 
-    if (this.check(TokenKind.Fn)) {
+    if (this.check(TokenKind.Fn) || this.check(TokenKind.Function)) {
       this.advance();
 
       // Constructor: fn new[params]
@@ -1078,7 +1080,7 @@ class Parser {
       return {
         type: "CompoundAssign",
         target: expr,
-        op: opToken.text,
+        op: opToken.text as CompoundAssignOp,
         value,
         span: this.spanFrom(start),
       };
@@ -1241,29 +1243,29 @@ class Parser {
         this.advance();
         if (this.check(TokenKind.Eq)) {
           this.advance();
-          const right = this.parseAddition();
+          const right = this.parseShift();
           left = { type: "BinOp", op: "le", left, right, span: this.mergeSpans(left.span, right.span) };
         } else {
-          const right = this.parseAddition();
+          const right = this.parseShift();
           left = { type: "BinOp", op: "lt", left, right, span: this.mergeSpans(left.span, right.span) };
         }
       } else if (this.check(TokenKind.Gt)) {
         this.advance();
         if (this.check(TokenKind.Eq)) {
           this.advance();
-          const right = this.parseAddition();
+          const right = this.parseShift();
           left = { type: "BinOp", op: "ge", left, right, span: this.mergeSpans(left.span, right.span) };
         } else {
-          const right = this.parseAddition();
+          const right = this.parseShift();
           left = { type: "BinOp", op: "gt", left, right, span: this.mergeSpans(left.span, right.span) };
         }
       } else if (this.check(TokenKind.Le)) {
         this.advance();
-        const right = this.parseAddition();
+        const right = this.parseShift();
         left = { type: "BinOp", op: "le", left, right, span: this.mergeSpans(left.span, right.span) };
       } else if (this.check(TokenKind.Ge)) {
         this.advance();
-        const right = this.parseAddition();
+        const right = this.parseShift();
         left = { type: "BinOp", op: "ge", left, right, span: this.mergeSpans(left.span, right.span) };
       } else {
         break;
@@ -2112,10 +2114,11 @@ class Parser {
       }
       const k = this.peek().kind;
       if (k === TokenKind.Const || k === TokenKind.Let || k === TokenKind.Var ||
-          k === TokenKind.Fn || k === TokenKind.If || k === TokenKind.While ||
-          k === TokenKind.For || k === TokenKind.Match || k === TokenKind.Import ||
-          k === TokenKind.Export || k === TokenKind.Return || k === TokenKind.Class ||
-          k === TokenKind.Try) {
+          k === TokenKind.Fn || k === TokenKind.Function ||
+          k === TokenKind.If || k === TokenKind.While || k === TokenKind.Do ||
+          k === TokenKind.For || k === TokenKind.Match || k === TokenKind.Switch ||
+          k === TokenKind.Import || k === TokenKind.Export || k === TokenKind.Public ||
+          k === TokenKind.Return || k === TokenKind.Class || k === TokenKind.Try) {
         return;
       }
       this.advance();

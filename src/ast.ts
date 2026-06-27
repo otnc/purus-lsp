@@ -75,10 +75,13 @@ export interface AssignStmt {
   span: Span;
 }
 
+export type CompoundAssignOp = "add" | "sub" | "mul" | "div" | "mod" | "pow" | "fdiv"
+  | "band" | "bor" | "bxor" | "shl" | "shr" | "ushr";
+
 export interface CompoundAssignStmt {
   type: "CompoundAssign";
   target: Expr;
-  op: string;
+  op: CompoundAssignOp;
   value: Expr;
   span: Span;
 }
